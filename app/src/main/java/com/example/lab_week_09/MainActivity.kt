@@ -35,6 +35,10 @@ import com.example.lab_week_09.ui.theme.LAB_WEEK_09Theme
 import com.example.lab_week_09.ui.theme.OnBackgroundItemText
 import com.example.lab_week_09.ui.theme.OnBackgroundTitleText
 import com.example.lab_week_09.ui.theme.PrimaryTextButton
+import com.squareup.moshi.JsonAdapter
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,20 +64,19 @@ fun App(navController: NavHostController) {
         startDestination = "home"
     ) {
         composable("home") {
-            Home { listDataString ->
-                navController.navigate("resultContent/?listData=$listDataString")
+            Home { jsonString ->
+                navController.navigate("resultContent/?listData=$jsonString")
             }
         }
-
         composable(
             "resultContent/?listData={listData}",
             arguments = listOf(navArgument("listData") {
                 type = NavType.StringType
+                nullable = true
             })
         ) {
-            ResultContent(
-                it.arguments?.getString("listData").orEmpty()
-            )
+            val jsonString = it.arguments?.getString("listData").orEmpty()
+            ResultContent(jsonString)
         }
     }
 }
@@ -90,6 +93,10 @@ fun Home(navigateFromHomeToResult: (String) -> Unit) {
 
     var inputField by remember { mutableStateOf(Student("")) }
 
+    val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+    val listType = Types.newParameterizedType(List::class.java, Student::class.java)
+    val adapter: JsonAdapter<List<Student>> = moshi.adapter(listType)
+
     HomeContent(
         listData = listData,
         inputField = inputField,
@@ -103,7 +110,8 @@ fun Home(navigateFromHomeToResult: (String) -> Unit) {
             }
         },
         navigateFromHomeToResult = {
-            navigateFromHomeToResult(listData.toList().toString())
+            val jsonString = adapter.toJson(listData.toList())
+            navigateFromHomeToResult(jsonString)
         }
     )
 }
@@ -140,7 +148,7 @@ fun HomeContent(
 
                     PrimaryTextButton(
                         text = stringResource(id = R.string.button_navigate),
-                        onClick = { navigateFromHomeToResult() } // Triggers navigation
+                        onClick = { navigateFromHomeToResult() }
                     )
                 }
             }
@@ -158,14 +166,30 @@ fun HomeContent(
 }
 
 @Composable
-fun ResultContent(listData: String) {
-    Column(
+fun ResultContent(jsonString: String) {
+    val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+    val listType = Types.newParameterizedType(List::class.java, Student::class.java)
+    val adapter: JsonAdapter<List<Student>> = moshi.adapter(listType)
+
+    val studentList: List<Student> = try {
+        adapter.fromJson(jsonString) ?: emptyList()
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    LazyColumn(
         modifier = Modifier
-            .padding(vertical = 4.dp)
+            .padding(16.dp)
             .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        OnBackgroundItemText(text = listData)
+        item {
+            OnBackgroundTitleText(text = "Submitted Names:")
+        }
+
+        items(studentList) { student ->
+            OnBackgroundItemText(text = student.name)
+        }
     }
 }
 
